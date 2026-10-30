@@ -1,4 +1,4 @@
-// 20 inscritos confirmados y 2 jugadores adicionales mencionados (Ridel y Yaki).
+// 20 inscritos confirmados y 2 jugadores adicionales mencionados (Ridel y Yoangel).
 // Las posiciones provienen de las alineaciones facilitadas; son editables.
 // Los apodos se conservan como nombres visibles de la inscripción.
 export const initialPlayers = [
@@ -9,7 +9,7 @@ export const initialPlayers = [
   ['King','3B'],['Iván','CF'],
   ['Ricardo','C'],['Yoyi','P'],['Bryan','CF'],
   ['Javic','LF'],['Azael','P'],['Martínez','3B'],['Guillermo','P'],
-  ['Ridel','UTIL'],['Yaki','UTIL'],
+  ['Ridel','UTIL'],['Yoangel','UTIL'],
 ].map(([name,pos],i)=>({id:`p${i+1}`,name,pos}));
 export const initialNames = initialPlayers.map(p=>p.name);
 export const positions = ['Sin definir','P','C','1B','2B','3B','SS','LF','CF','RF','DH','UTIL'];
