@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+
+  function isAdmin() { return request.auth != null && request.auth.uid == 'X8VJfekvaOS6YovJ1JSELaNerOt2'; }
+  match /tournaments/{id} { allow read, write: if isAdmin(); }
+  match /public/{id} { allow get: if id == 'mahanaim-roster'; allow list: if false; allow write: if isAdmin(); }
+  match /playerResults/{id} { allow get: if true; allow list: if false; allow write: if isAdmin(); }
+ }
+}
