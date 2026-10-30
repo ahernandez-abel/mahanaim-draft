@@ -1,6 +1,18 @@
-export const initialNames = ['Ariel','Abel','Carlos Rodríguez','Luis Rodríguez','Edibert','Albert','Nov','Alexis','Puello','Ángel Estrella','Eduardo','King','Iván','Ricardo','Yoyi','Bryan','Javic','Azael','Martínez','Guillermo','Ridder','Yoangel'];
-export const positions = ['Sin definir','P','C','1B','2B','3B','SS','LF','CF','RF','DH'];
-export const initialPlayers = initialNames.map((name,i)=>({id:`p${i+1}`,name,pos:i===18?'RF':'Sin definir'}));
+// 20 inscritos confirmados y 2 jugadores adicionales mencionados (Ridel y Yaki).
+// Las posiciones provienen de las alineaciones facilitadas; son editables.
+// Los apodos se conservan como nombres visibles de la inscripción.
+export const initialPlayers = [
+  ['Ariel','P'],['Abel','SS'],['Carlos Rodríguez','SS'],
+  ['Luis Rodríguez','2B'],['Edibert','1B'],['Albert','LF'],
+  ['Novas','C'],['Alexis','DH'],['Puello','2B'],
+  ['Ángel Estrella','RF'],['Eduardo','1B'],
+  ['King','3B'],['Iván','CF'],
+  ['Ricardo','C'],['Yoyi','P'],['Bryan','CF'],
+  ['Javic','LF'],['Azael','P'],['Martínez','3B'],['Guillermo','P'],
+  ['Ridel','UTIL'],['Yaki','UTIL'],
+].map(([name,pos],i)=>({id:`p${i+1}`,name,pos}));
+export const initialNames = initialPlayers.map(p=>p.name);
+export const positions = ['Sin definir','P','C','1B','2B','3B','SS','LF','CF','RF','DH','UTIL'];
 const rand = max => { const lim=Math.floor(4294967296/max)*max; const a=new Uint32Array(1); do {crypto.getRandomValues(a)} while(a[0]>=lim); return a[0]%max; };
 export function shuffle(items){const a=[...items]; for(let i=a.length-1;i>0;i--){const j=rand(i+1); [a[i],a[j]]=[a[j],a[i]];} return a;}
 export function validate(players,captains){const names=players.map(p=>p.name.trim().toLocaleLowerCase('es')); if(players.length<4) return 'Registra al menos 4 jugadores.'; if(players.some(p=>!p.name.trim()))return 'Todos los jugadores necesitan un nombre.'; if(new Set(names).size!==names.length)return 'Hay nombres duplicados. Usa nombres distinguibles.'; if(!captains[0]||!captains[1]||captains[0]===captains[1])return 'Selecciona dos capitanes diferentes.'; if(captains.some(id=>!players.some(p=>p.id===id)))return 'Uno de los capitanes no aparece en la lista.'; return null;}
