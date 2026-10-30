@@ -2,14 +2,12 @@ import React,{useEffect,useMemo,useState} from 'react';
 import {Trophy,Users,Shuffle,Share2,Plus,Trash2,ArrowLeft,CheckCircle2,Copy,Download,RotateCcw,ShieldCheck,Eye,LockKeyhole} from 'lucide-react';
 import {initialPlayers,positions,validate,makeDraft} from './draft';
 import {auth} from './firebase';
-import {signInWithEmailAndPassword,onAuthStateChanged,signOut} from 'firebase/auth';
+import {signInAnonymously,onAuthStateChanged} from 'firebase/auth';
 import {watchTournament,loadPublicRoster,loadPlayerResult,saveTournament} from './cloud';
 const getName=(players,id)=>players.find(p=>p.id===id)?.name||'—';
 function App(){
  const [shared,setShared]=useState(null);
  const [adminUser,setAdminUser]=useState(null);
- const [email,setEmail]=useState('');
- const [password,setPassword]=useState('');
  const [busy,setBusy]=useState(false);
  const [publicRoster,setPublicRoster]=useState([]);
  const [playerResult,setPlayerResult]=useState(null);
@@ -30,11 +28,10 @@ function App(){
  const total=players.length;
  const playerList=useMemo(()=>active?.teams.flatMap(t=>t.players)||[],[active]);
  const chosen=active?.teams.find(t=>t.players.some(p=>p.id===selected));
- useEffect(()=>onAuthStateChanged(auth,setAdminUser),[]);
+ useEffect(()=>{const unsub=onAuthStateChanged(auth,user=>{setAdminUser(user);if(!user)signInAnonymously(auth).catch(e=>setError('No se pudo conectar con Firebase: '+e.message));});return unsub;},[]);
  useEffect(()=>{if(!adminUser)return;return watchTournament(data=>{if(data){setPlayers(data.players||initialPlayers);setTeamNames(data.teamNames||['Equipo Rojo','Equipo Azul']);setCaptains(data.captains||['','']);setDraft(data.draft||null);}},e=>setError('No se pudo cargar Firestore: '+e.message));},[adminUser]);
  useEffect(()=>{loadPublicRoster().then(data=>setPublicRoster(data?.published?data.players||[]:[])).catch(()=>{});},[screen]);
- function login(e){e.preventDefault();const adminCode=import.meta.env.VITE_ADMIN_CODE||'2000';const playerCode=import.meta.env.VITE_PLAYER_CODE||'222';if(code===adminCode){setAccess('admin');setScreen('admin-login');setAccessError('');}else if(code===playerCode){setAccess('player');setScreen('player');setAccessError('');}else setAccessError('Código incorrecto.');setCode('');}
- async function loginAdmin(e){e.preventDefault();setBusy(true);setAccessError('');try{await signInWithEmailAndPassword(auth,email,password);setScreen('admin');}catch{setAccessError('No se pudo iniciar sesión. Revisa el correo y la contraseña.');}finally{setBusy(false);}}
+ function login(e){e.preventDefault();const adminCode=import.meta.env.VITE_ADMIN_CODE||'12345';const playerCode=import.meta.env.VITE_PLAYER_CODE||'222';if(code===adminCode){setAccess('admin');setScreen('admin');setAccessError('');}else if(code===playerCode){setAccess('player');setScreen('player');setAccessError('');}else setAccessError('Código incorrecto.');setCode('');}
  async function persist(nextDraft=draft){setBusy(true);setError('');try{await saveTournament({players,teamNames,captains,draft:nextDraft});return true;}catch(e){setError('No se pudo guardar: '+e.message);return false;}finally{setBusy(false);}}
  function updatePlayer(id,key,value){setPlayers(p=>p.map(x=>x.id===id?{...x,[key]:value}:x));setError('');}
  function addPlayer(){setPlayers(p=>[...p,{id:crypto.randomUUID(),name:'',pos:'Sin definir'}]);}
@@ -48,7 +45,6 @@ function App(){
  return <div className="app"><header className="topbar"><div className="brand"><span className="brand-icon">🥎</span><div><strong>MAHANAIM <em>DRAFT</em></strong><small>TORNEO INTERNO · SOFTBALL</small></div></div><span className="badge">DÍA DE JUEGO</span></header>
  <main className="container"><section className="hero"><div className="eyebrow">MAHANAIM · TORNEO INTERNO</div><h1>DOS EQUIPOS.<br/><span>UNA RIVALIDAD.</span></h1><p>El mismo escudo. Dos bandos. Que hable el terreno.</p><div className="versus"><div className="versus-team red"><span>🔴</span><strong>{active?.teams[0]?.name||teamNames[0]}</strong></div><b>VS</b><div className="versus-team blue"><span>🔵</span><strong>{active?.teams[1]?.name||teamNames[1]}</strong></div></div></section>
  {screen==='gate'&&<section className="card reveal-card"><div className="ball">🥎</div><div className="eyebrow">ACCESO AL TORNEO</div><h2>ENTRA AL TERRENO</h2><p>Introduce el código que recibiste para acceder.</p><form onSubmit={login} className="access-form"><label className="choose">CÓDIGO DE ACCESO<input type="password" inputMode="numeric" autoComplete="off" placeholder="•••••" value={code} onChange={e=>{setCode(e.target.value);setAccessError('');}} /></label>{accessError&&<p className="error" role="alert">{accessError}</p>}<button type="submit" className="btn primary large full">ENTRAR</button></form><p className="hint">Los organizadores y los jugadores utilizan códigos diferentes.</p></section>}
- {screen==='admin-login'&&<section className="card reveal-card"><h2>ACCESO ADMINISTRADOR</h2><p>Inicia sesión con tu cuenta de Firebase Authentication.</p><form className="access-form" onSubmit={loginAdmin}><label>Correo<input type="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Contraseña<input type="password" required value={password} onChange={e=>setPassword(e.target.value)}/></label>{accessError&&<p className="error">{accessError}</p>}<button className="btn primary full" disabled={busy}>ENTRAR COMO ADMINISTRADOR</button></form></section>}
  {screen==='admin'&&adminUser&&access==='admin'&&<><section className="stats"><div><strong>{total}</strong><span>JUGADORES</span></div><div><strong>2</strong><span>EQUIPOS</span></div><div><strong>{Math.ceil(total/2)} / {Math.floor(total/2)}</strong><span>REPARTO</span></div></section>
  <section className="card"><div className="section-title"><h2><span>01</span> Nombres de los equipos</h2><p>Personalízalos o deja Rojo y Azul.</p></div><div className="two-cols"><label>🔴 Equipo rojo<input value={teamNames[0]} maxLength={35} onChange={e=>setTeamNames(n=>[e.target.value,n[1]])}/></label><label>🔵 Equipo azul<input value={teamNames[1]} maxLength={35} onChange={e=>setTeamNames(n=>[n[0],e.target.value])}/></label></div></section>
  <section className="card"><div className="section-title row"><div><h2><span>02</span> Lista de jugadores</h2><p>Una posición principal por jugador. Puedes agregar participantes.</p></div><span className="count">{total} inscritos</span></div><div className="player-table"><div className="table-head"><span>#</span><span>NOMBRE</span><span>POSICIÓN</span><span></span></div>{players.map((p,i)=><div className="player-row" key={p.id}><span className="num">{String(i+1).padStart(2,'0')}</span><input aria-label={`Nombre jugador ${i+1}`} value={p.name} placeholder="Nombre del jugador" onChange={e=>updatePlayer(p.id,'name',e.target.value)}/><select aria-label={`Posición de ${p.name||'jugador'}`} value={p.pos} onChange={e=>updatePlayer(p.id,'pos',e.target.value)}>{positions.map(pos=><option key={pos}>{pos}</option>)}</select><button className="icon-btn" title="Eliminar jugador" onClick={()=>removePlayer(p.id)}><Trash2 size={17}/></button></div>)}</div><button className="btn outline full" onClick={addPlayer}><Plus size={18}/> Agregar jugador</button><p className="hint">Si hay un número impar de jugadores, un equipo tendrá una persona más.</p></section>
