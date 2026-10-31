@@ -1,23 +1,26 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Solo el navegador cuyo UID se autorizó puede modificar el torneo.
-    // Si cambia el navegador o se borran sus datos, cambia también el UID.
     function isAdmin() {
-      return request.auth != null
-        && request.auth.uid == 'Kwf1VowbxKdje6ZYumc71N2ZPTH3';
+      return request.auth != null && request.auth.token.role == 'admin';
     }
+    function isPlayer(id) {
+      return request.auth != null
+        && request.auth.token.role == 'player'
+        && request.auth.token.playerId == id;
+    }
+
     match /tournaments/{id} {
       allow get, list, create, update, delete: if isAdmin();
     }
     match /public/{id} {
+      // El roster publicado contiene solo ID y nombre, nunca equipos.
       allow get: if id == 'mahanaim-roster';
       allow list: if false;
       allow create, update, delete: if isAdmin();
     }
     match /playerResults/{id} {
-      // Resultados individuales consultables por ID, sin permitir listarlos.
-      allow get: if true;
+      allow get: if isAdmin() || isPlayer(id);
       allow list: if false;
       allow create, update, delete: if isAdmin();
     }

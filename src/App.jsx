@@ -2,13 +2,13 @@ import React,{useEffect,useMemo,useState} from 'react';
 import {Trophy,Users,Shuffle,Share2,Plus,Trash2,ArrowLeft,CheckCircle2,Copy,Download,RotateCcw,ShieldCheck,Eye,LockKeyhole} from 'lucide-react';
 import {initialPlayers,positions,validate,makeDraft} from './draft';
 import {auth} from './firebase';
-import {signInAnonymously,onAuthStateChanged} from 'firebase/auth';
+import {signInWithCustomToken,onAuthStateChanged,signOut} from 'firebase/auth';
 import {watchTournament,loadPublicRoster,loadPlayerResult,saveTournament} from './cloud';
 const getName=(players,id)=>players.find(p=>p.id===id)?.name||'—';
 function App(){
  const [shared,setShared]=useState(null);
  const [adminUser,setAdminUser]=useState(null);
- const [authReady,setAuthReady]=useState(false);
+ const [playerAccessCode,setPlayerAccessCode]=useState('');
  const [loadFailed,setLoadFailed]=useState(false);
  const [busy,setBusy]=useState(false);
  const [loaded,setLoaded]=useState(false);
@@ -32,7 +32,7 @@ function App(){
  const total=players.length;
  const playerList=useMemo(()=>active?.teams.flatMap(t=>t.players)||[],[active]);
  const chosen=active?.teams.find(t=>t.players.some(p=>p.id===selected));
- useEffect(()=>{const unsub=onAuthStateChanged(auth,user=>{setAdminUser(user);if(user){setAuthReady(true);}else signInAnonymously(auth).catch(e=>{setAuthReady(true);setError('No se pudo conectar con Firebase: '+e.message);});});return unsub;},[]);
+ useEffect(()=>onAuthStateChanged(auth,user=>setAdminUser(user)),[]);
  useEffect(()=>{if(!adminUser||access!=='admin')return;setLoaded(false);setLoadFailed(false);return watchTournament(data=>{
   if(data){setPlayers(Array.isArray(data.players)?data.players:initialPlayers);setTeamNames(data.teamNames||['Equipo Rojo','Equipo Azul']);setCaptains(data.captains||['','']);setDraft(data.draft||null);setSaved(true);}
   else{setSaved(false);setDraft(null);}
@@ -40,7 +40,25 @@ function App(){
  },e=>{setLoaded(true);setLoadFailed(true);setError('No se pudo cargar Firestore: '+e.message);});},[adminUser,access]);
  useEffect(()=>{if(access!=='admin'||!loaded)return;if(draft&&screen==='admin')setScreen('result');if(!draft&&screen==='result')setScreen('admin');},[draft,loaded,access,screen]);
  useEffect(()=>{loadPublicRoster().then(data=>setPublicRoster(data?.published?data.players||[]:[])).catch(()=>{});},[screen]);
- function login(e){e.preventDefault();const adminCode=import.meta.env.VITE_ADMIN_CODE||'12345';const playerCode=import.meta.env.VITE_PLAYER_CODE||'222';if(code===adminCode){setAccess('admin');setScreen(draft?'result':'admin');setAccessError('');}else if(code===playerCode){setAccess('player');setScreen('player');setAccessError('');}else setAccessError('Código incorrecto.');setCode('');}
+ async function login(e){
+  e.preventDefault();
+  const adminCode=import.meta.env.VITE_ADMIN_CODE||'12345';
+  const playerCode=import.meta.env.VITE_PLAYER_CODE||'222';
+  setAccessError('');
+  if(code===adminCode){
+   try{
+    const response=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,role:'admin'})});
+    const payload=await response.json();
+    if(!response.ok)throw new Error(payload.error||'No se pudo validar el código.');
+    await signInWithCustomToken(auth,payload.token);
+    setAccess('admin');setScreen('admin');setLoadFailed(false);setLoaded(false);
+   }catch(err){setAccessError('No se pudo autorizar al organizador: '+err.message);}
+  }else if(code===playerCode){
+   try{await signOut(auth);}catch{}
+   setPlayerAccessCode(code);setAccess('player');setScreen('player');setSelected('');setPlayerResult(null);setRevealed(false);
+  }else setAccessError('Código incorrecto.');
+  setCode('');
+ }
  async function persist(nextDraft=draft){if(!adminUser||!loaded||loadFailed){setError('No se puede guardar hasta recuperar el torneo de Firebase. Verifica los permisos y vuelve a entrar.');return false;}setBusy(true);setError('');try{await saveTournament({players,teamNames,captains,draft:nextDraft});return true;}catch(e){setError('No se pudo guardar: '+e.message);return false;}finally{setBusy(false);}}
  function updatePlayer(id,key,value){setPlayers(p=>p.map(x=>x.id===id?{...x,[key]:value}:x));setError('');}
  function addPlayer(){setPlayers(p=>[...p,{id:crypto.randomUUID(),name:'',pos:'Sin definir'}]);}
@@ -49,7 +67,19 @@ function App(){
  async function copyLink(){const url=location.origin+location.pathname;try{await navigator.clipboard.writeText(url);setCopied(true);setTimeout(()=>setCopied(false),2400);}catch{window.prompt('Copia este enlace:',url);}}
  function shareWhatsapp(){const text=`🥎 TORNEO INTERNO MAHANAIM\n🔴 vs 🔵\n¡Descubre tu equipo! Selecciona tu nombre en el enlace:\n${location.origin+location.pathname}`;window.open(`https://wa.me/?text=${encodeURIComponent(text)}`,'_blank','noopener,noreferrer');}
  function exportResults(){const lines=['TORNEO INTERNO MAHANAIM','',...active.teams.flatMap(t=>[`${t.name} (Capitán: ${getName(t.players,t.captain)})`,...t.players.map((p,i)=>`${i+1}. ${p.name} — ${p.pos}`),''])];const blob=new Blob([lines.join('\n')],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='equipos-mahanaim.txt';a.click();URL.revokeObjectURL(url);}
- async function reveal(){if(!selected)return;setRevealed(false);setPlayerResult(null);setSpinning(true);try{const result=await loadPlayerResult(selected);if(!result)throw Error('Todavía no se ha publicado tu equipo.');setTimeout(()=>{setPlayerResult(result);setSpinning(false);setRevealed(true);},2300);}catch(e){setSpinning(false);setError(e.message);}}
+ async function reveal(){
+  if(!selected)return;
+  setRevealed(false);setPlayerResult(null);setSpinning(true);setError('');
+  try{
+   const response=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:playerAccessCode,role:'player',playerId:selected})});
+   const payload=await response.json();
+   if(!response.ok)throw new Error(payload.error||'No se pudo validar el acceso del jugador.');
+   await signInWithCustomToken(auth,payload.token);
+   const result=await loadPlayerResult(selected);
+   if(!result)throw Error('Todavía no se ha publicado tu equipo.');
+   setTimeout(()=>{setPlayerResult(result);setSpinning(false);setRevealed(true);},1200);
+  }catch(e){setSpinning(false);setError(e.message);}
+ }
  async function reset(){
   if(busy)return;
   if(!window.confirm('¿REINICIAR EL SORTEO? Se borrarán de Firebase las asignaciones de los equipos. Se conservarán jugadores, posiciones y capitanes. Los resultados anteriores dejarán de estar disponibles.'))return;
