@@ -1,21 +1,25 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // AVISO: cualquier usuario autenticado anónimamente puede escribir.
-    // El código 12345 es solo una barrera de interfaz, NO una credencial segura.
-    // Uso temporal para un torneo informal. NO usar para datos sensibles.
+    // Solo el navegador cuyo UID se autorizó puede modificar el torneo.
+    // Si cambia el navegador o se borran sus datos, cambia también el UID.
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.uid == 'Kwf1VowbxKdje6ZYumc71N2ZPTH3';
+    }
     match /tournaments/{id} {
-      allow read, write: if request.auth != null;
+      allow get, list, create, update, delete: if isAdmin();
     }
     match /public/{id} {
       allow get: if id == 'mahanaim-roster';
       allow list: if false;
-      allow write: if request.auth != null;
+      allow create, update, delete: if isAdmin();
     }
     match /playerResults/{id} {
+      // Resultados individuales consultables por ID, sin permitir listarlos.
       allow get: if true;
       allow list: if false;
-      allow write: if request.auth != null;
+      allow create, update, delete: if isAdmin();
     }
   }
 }
